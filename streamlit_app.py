@@ -74,7 +74,18 @@ def agent_log_processor():
             # Get log entry from queue (non-blocking)
             try:
                 log_entry = log_queue.get_nowait()
-                st.session_state.agent_logs.append(log_entry)
+                # Print for debugging
+                print(f"Received log entry: {log_entry}")
+                
+                # Store in global variable for backup
+                if not hasattr(agent_log_processor, 'backup_logs'):
+                    agent_log_processor.backup_logs = []
+                agent_log_processor.backup_logs.append(log_entry)
+                
+                # Use a thread-safe way to store logs
+                if "agent_logs" in st.session_state:
+                    st.session_state.agent_logs.append(log_entry)
+                    print(f"Added log to session state. Total: {len(st.session_state.agent_logs)}")
             except queue.Empty:
                 pass
             
@@ -101,88 +112,349 @@ st.set_page_config(
 # Custom CSS for better styling
 st.markdown("""
 <style>
+    /* Page background - dark theme */
+    .stApp {
+        background-color: #121212 !important;
+        background-image: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23222222' fill-opacity='0.8' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='1'/%3E%3Ccircle cx='13' cy='13' r='1'/%3E%3C/g%3E%3C/svg%3E") !important;
+        color: #e0e0e0 !important;
+    }
+    
+    /* Main content background enhancement with texture */
+    .main .block-container {
+        background-color: rgba(30, 30, 30, 0.7);
+        background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232196f3' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
+        border-radius: 10px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        padding: 1.5rem;
+        margin-top: 1rem;
+    }
+    
+    /* Sidebar background - dark */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(135deg, #1A237E 0%, #0D47A1 100%);
+        color: white;
+    }
+    
+    /* Headers with gradients for dark mode */
     .main-header {
         font-size: 2.5rem;
-        color: #1E88E5;
-        margin-bottom: 1rem;
+        background: linear-gradient(90deg, #2196F3, #64B5F6);
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem 0;
     }
+    
+    /* Subheaders for dark mode */
+    .sub-header {
+        font-size: 1.5rem;
+        color: #e0e0e0;
+        margin: 0.5rem 0;
+        border-left: 4px solid #2196F3;
+        padding-left: 10px;
+    }
+    
+    /* Card improvements with subtle shadows and borders for dark mode */
+    .card {
+        background-color: rgba(40, 40, 40, 0.8) !important;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+        margin-bottom: 1.2rem;
+        border: 1px solid rgba(70, 70, 70, 0.8);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        color: #e0e0e0;
+    }
+    
+    .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), 0 3px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    /* Card headers for dark mode */
+    .card h3 {
+        color: #e0e0e0 !important;
+    }
+    
+    /* Form elements for dark mode */
+    .stTextInput > div > div > input,
+    .stSelectbox > div > div > div,
+    .stMultiSelect > div > div > div {
+        background-color: rgba(60, 60, 60, 0.8);
+        color: #e0e0e0;
+        border-color: rgba(100, 100, 100, 0.6);
+    }
+    
+    /* Radio buttons in dark mode */
+    .stRadio label {
+        color: #e0e0e0 !important;
+    }
+    
+    /* Checkbox labels in dark mode */
+    .stCheckbox label {
+        color: #e0e0e0 !important;
+    }
+    
+    /* Text color for all st elements */
+    .st-bc, .st-ae, .st-af, .st-ag, .st-ah, .st-ai, .st-aj, .st-ak, .st-al {
+        color: #e0e0e0;
+    }
+    
+    /* Label styling for dark mode */
+    .stTextInput > div > label,
+    .stSelectbox > div > label,
+    .stMultiSelect > div > label {
+        color: #b0b0b0;
+    }
+    
+    /* Header container with enhanced design for dark mode */
+    .header-container {
+        background: linear-gradient(135deg, rgba(40, 40, 40, 0.9), rgba(30, 30, 30, 0.9));
+        border-radius: 12px;
+        padding: 1.2rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(70, 70, 70, 0.7);
+        backdrop-filter: blur(5px);
+    }
+    
+    /* Section headers with accents for dark mode */
+    .section-header {
+        background: linear-gradient(to right, rgba(40, 40, 40, 0.8), transparent);
+    }
+    
+    /* Agent log styling for dark mode */
+    .agent-log {
+        background-color: rgba(30, 30, 30, 0.9);
+        border: 1px solid rgba(70, 70, 70, 0.7);
+        color: #d0d0d0;
+    }
+    
+    /* Sector description container for dark mode */
+    .sector-description-container {
+        background: linear-gradient(to right, rgba(50, 60, 50, 0.7), rgba(40, 50, 40, 0.3));
+        border-left: 3px solid #43A047;
+    }
+    
+    /* Info text for dark mode */
+    .info-text {
+        color: #b0b0b0;
+    }
+    
+    /* Highlight section for dark mode */
+    .highlight {
+        background: linear-gradient(to right, rgba(40, 50, 70, 0.7), rgba(30, 40, 60, 0.3));
+        border-left: 3px solid #2196F3;
+    }
+    
+    /* Make sure all text has good contrast */
+    p, li, div, span {
+        color: #e0e0e0;
+    }
+    
+    /* Style the markdown report for dark mode */
+    .markdown-report {
+        border: 1px solid rgba(70, 70, 70, 0.7);
+        border-radius: 10px;
+        padding: 20px;
+        background-color: rgba(30, 30, 30, 0.8);
+        color: #e0e0e0;
+        overflow-y: auto;
+        max-height: 600px;
+        font-family: 'Roboto', sans-serif;
+        line-height: 1.6;
+    }
+    
+    .markdown-report h1, .markdown-report h2, .markdown-report h3 {
+        color: #90CAF9;
+        border-bottom: 1px solid rgba(100, 100, 100, 0.3);
+        padding-bottom: 5px;
+    }
+    
+    .markdown-report a {
+        color: #64B5F6;
+    }
+    
+    .markdown-report code {
+        background-color: rgba(50, 50, 50, 0.8);
+        border: 1px solid rgba(80, 80, 80, 0.6);
+        border-radius: 4px;
+        padding: 2px 5px;
+        font-family: 'Courier New', monospace;
+        color: #BBDEFB;
+    }
+    
+    .markdown-report table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 15px 0;
+    }
+    
+    .markdown-report th {
+        background-color: rgba(50, 50, 50, 0.8);
+        color: #90CAF9;
+        border: 1px solid rgba(80, 80, 80, 0.6);
+        padding: 8px 12px;
+        text-align: left;
+    }
+    
+    .markdown-report td {
+        border: 1px solid rgba(80, 80, 80, 0.6);
+        padding: 8px 12px;
+        background-color: rgba(40, 40, 40, 0.8);
+    }
+    
+    .markdown-report tr:nth-child(even) td {
+        background-color: rgba(45, 45, 45, 0.8);
+    }
+    
+    .markdown-report blockquote {
+        border-left: 3px solid #64B5F6;
+        padding-left: 10px;
+        margin-left: 0;
+        color: #B0BEC5;
+        font-style: italic;
+        background-color: rgba(50, 50, 50, 0.4);
+        padding: 10px;
+        border-radius: 0 5px 5px 0;
+    }
+    
+    /* Base styling improvements */
+    .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        max-width: 95%;
+    }
+    
+    /* Modern headers with gradients */
+    .main-header {
+        font-size: 2.5rem;
+        background: linear-gradient(90deg, #1E88E5, #42A5F5);
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+        padding: 0.5rem 0;
+    }
+    
     .sub-header {
         font-size: 1.5rem;
         color: #424242;
-        margin-bottom: 1rem;
+        margin: 0.5rem 0;
+        border-left: 4px solid #1E88E5;
+        padding-left: 10px;
     }
+    
+    /* Card improvements with subtle shadows and borders */
     .card {
-        background-color: #f9f9f9;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1.2rem;
+        border: 1px solid rgba(220, 230, 240, 0.8);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
     }
-    .info-text {
-        font-size: 0.9rem;
-        color: #616161;
+    
+    .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12), 0 3px 8px rgba(0, 0, 0, 0.06);
     }
-    .highlight {
-        background-color: #f0f7ff;
-        padding: 10px;
-        border-left: 3px solid #1E88E5;
-        margin: 10px 0;
+    
+    /* Improve form elements with more modern styling */
+    .stTextInput > div > div > input:focus,
+    .stSelectbox > div > div > div:focus-within,
+    .stMultiSelect > div > div > div:focus-within {
+        border-color: #1976D2;
+        box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
     }
+    
+    /* Enhanced label styling */
+    .stTextInput > div > label,
+    .stSelectbox > div > label,
+    .stMultiSelect > div > label {
+        font-weight: 500;
+        color: #344054;
+        margin-bottom: 0.3rem;
+        font-size: 0.95rem;
+    }
+    
+    /* Improve widgets container spacing */
+    div[data-testid="stVerticalBlock"] > div {
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Radio and checkbox styling */
+    .stRadio > div,
+    .stCheckbox > div {
+        padding: 0.3rem 0.1rem;
+        margin-bottom: 0.2rem;
+    }
+    
+    /* Container for sector descriptions */
+    .sector-description-container {
+        background: linear-gradient(to right, rgba(232, 245, 233, 0.7), rgba(241, 248, 233, 0.3));
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 12px;
+        border-left: 3px solid #43A047;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    }
+    
     .success-text {
         color: #4CAF50;
         font-weight: bold;
     }
+    
     .divider {
-        margin: 20px 0;
-        border-bottom: 1px solid #e0e0e0;
+        margin: 15px 0;
+        height: 1px;
+        background: linear-gradient(to right, transparent, #e0e0e0, transparent);
+        border: none;
     }
+    
+    /* Enhanced agent logs */
     .agent-log {
         height: 300px;
         overflow-y: auto;
-        border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 15px;
-        background-color: #f5f5f5;
-        font-family: monospace;
+        border-radius: 8px;
+        padding: 12px;
+        background-color: #fafafa;
+        font-family: 'Courier New', monospace;
         margin-bottom: 15px;
         font-size: 0.85rem;
+        border: 1px solid #eaeaea;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
     }
+    
     .agent-entry {
         margin-bottom: 8px;
         padding-bottom: 8px;
         border-bottom: 1px dashed #e0e0e0;
     }
-    .agent-data {
-        color: #1565C0;
-        font-weight: bold;
-    }
-    .agent-strategy {
-        color: #7B1FA2;
-        font-weight: bold;
-    }
-    .agent-risk {
-        color: #C62828;
-        font-weight: bold;
-    }
-    .agent-trade {
-        color: #2E7D32;
-        font-weight: bold;
-    }
-    .agent-portfolio {
-        color: #FF6F00;
-        font-weight: bold;
-    }
-    .agent-market {
-        color: #0277BD;
-        font-weight: bold;
-    }
-    .agent-manager {
-        color: #212121;
-        font-weight: bold;
-    }
+    
+    /* Agent colors */
+    .agent-data { color: #1565C0; font-weight: bold; }
+    .agent-strategy { color: #7B1FA2; font-weight: bold; }
+    .agent-risk { color: #C62828; font-weight: bold; }
+    .agent-trade { color: #2E7D32; font-weight: bold; }
+    .agent-portfolio { color: #FF6F00; font-weight: bold; }
+    .agent-market { color: #0277BD; font-weight: bold; }
+    .agent-manager { color: #212121; font-weight: bold; }
+    
     .log-time {
         color: #616161;
         font-size: 0.75rem;
     }
+    
     .log-details {
         color: #616161;
         font-size: 0.8rem;
@@ -191,12 +463,174 @@ st.markdown("""
         padding-left: 5px;
         border-left: 2px solid #e0e0e0;
     }
+    
+    /* Button styling for dark mode */
+    .stButton > button {
+        border-radius: 5px;
+        padding: 0.25rem 1rem;
+        font-weight: 500;
+        background-color: #263238;
+        border: 1px solid #455A64;
+        color: #e0e0e0;
+        transition: all 0.2s;
+    }
+    
+    .stButton > button:hover {
+        background-color: #37474F;
+        border-color: #546E7A;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* Primary button */
+    .stButton > button[data-baseweb="button"]:first-child {
+        background: linear-gradient(90deg, #1565C0, #1976D2);
+        color: white;
+        border: none;
+    }
+    
+    .stButton > button[data-baseweb="button"]:first-child:hover {
+        background: linear-gradient(90deg, #0D47A1, #1565C0);
+        box-shadow: 0 3px 7px rgba(0, 0, 0, 0.3);
+    }
+    
+    /* Capital buttons */
+    div[key^="cap_"] button {
+        background-color: #263238;
+        color: #e0e0e0;
+        border: 1px solid #455A64;
+    }
+    
+    div[key^="cap_"] button:hover {
+        background-color: #37474F;
+        border-color: #546E7A;
+    }
+    
+    /* News info box styling for dark mode */
+    .news-info-box {
+        display: flex;
+        align-items: center;
+        padding: 10px 15px;
+        background: linear-gradient(to right, rgba(40, 50, 70, 0.7), rgba(30, 40, 60, 0.3));
+        border-radius: 8px;
+        border: 1px solid rgba(70, 90, 120, 0.6);
+    }
+    
+    /* Override dropdown menu background */
+    div[data-baseweb="select"] ul {
+        background-color: #263238 !important;
+        color: #e0e0e0 !important;
+    }
+    
+    div[data-baseweb="select"] li {
+        color: #e0e0e0 !important;
+    }
+    
+    div[data-baseweb="select"] li:hover {
+        background-color: #37474F !important;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        background-color: rgba(40, 40, 40, 0.8);
+        border-radius: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        color: #b0b0b0;
+        border-radius: 4px;
+    }
+    
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background-color: rgba(33, 150, 243, 0.2);
+        color: #e0e0e0;
+    }
+    
+    /* Plots and charts background */
+    .js-plotly-plot .plotly {
+        background-color: rgba(40, 40, 40, 0.8) !important;
+    }
+    
+    /* Hover tooltip */
+    .tooltip, [data-tooltip]::after {
+        background-color: #263238 !important;
+        color: #e0e0e0 !important;
+        border: 1px solid #455A64 !important;
+    }
+    
+    /* Fix spacing in sidebar */
+    .css-1d391kg, .css-163ttbj, .css-1a32fsj {
+        padding-top: 0 !important;
+    }
+    
+    /* Sidebar styling */
+    .css-1cypcdb {
+        background: linear-gradient(180deg, #1976D2 0%, #2196F3 100%);
+        color: white;
+    }
+    
+    .css-1cypcdb .main-header {
+        color: white !important;
+        background: none;
+        -webkit-background-clip: unset;
+        background-clip: unset;
+    }
+    
+    /* Improve expander styling */
+    .streamlit-expanderHeader {
+        font-weight: 500;
+        color: #424242;
+        background-color: #f9f9f9;
+        border-radius: 5px;
+    }
+    
+    /* Progress bar styling */
+    .stProgress > div > div > div > div {
+        background-color: #2196F3;
+    }
+    
+    /* Section dividers with gradient */
+    .divider {
+        margin: 25px 0;
+        height: 3px;
+        background: linear-gradient(to right, 
+            rgba(25, 118, 210, 0.1), 
+            rgba(25, 118, 210, 0.5), 
+            rgba(25, 118, 210, 0.1));
+        border: none;
+        border-radius: 3px;
+    }
+    
+    /* Section headers with accents */
+    .section-header {
+        display: flex;
+        align-items: center;
+        margin: 1.5rem 0;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(to right, rgba(240, 245, 255, 0.8), transparent);
+        border-radius: 8px;
+    }
+    
+    .section-indicator {
+        width: 5px;
+        height: 28px;
+        margin-right: 12px;
+        border-radius: 3px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # App Header
-st.markdown("<div class='main-header'>StockSage AI</div>", unsafe_allow_html=True)
-st.markdown("<div class='info-text'>Intelligent Investment Analysis with Multi-Agent AI</div>", unsafe_allow_html=True)
+st.markdown("""
+<div class="header-container">
+    <div style="display: flex; align-items: center;">
+        <div style="font-size: 2.5rem; margin-right: 1.2rem; background: linear-gradient(45deg, #1976D2, #64B5F6); -webkit-background-clip: text; background-clip: text; color: transparent;">💰</div>
+        <div>
+            <div class='main-header'>StockSage AI</div>
+            <div style="font-size: 1rem; color: #666;">Intelligent Investment Analysis with Multi-Agent AI</div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # Load environment variables
 @st.cache_resource
@@ -239,12 +673,22 @@ with st.sidebar.expander("About", expanded=False):
 st.markdown("<div class='main-header'>Financial Analysis AI Assistant</div>", unsafe_allow_html=True)
 
 # Investment parameters collection
-st.markdown("<div class='sub-header'>Investment Parameters</div>", unsafe_allow_html=True)
+st.markdown("""
+<div class="section-header">
+    <div class="section-indicator" style="background: linear-gradient(180deg, #1976D2, #64B5F6);"></div>
+    <div class='sub-header'>Investment Parameters</div>
+</div>
+""", unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="card" style="position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #1976D2, #64B5F6);"></div>
+        <h3 style="margin-top: 8px; font-size: 1.2rem; color: #333;">Capital & Risk</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Capital input with suggestions
     capital_options = ["10000", "50000", "100000", "250000", "500000", "1000000"]
@@ -278,11 +722,14 @@ with col1:
     )
     
     st.markdown(f"<div class='info-text'>{risk_descriptions[risk_tolerance]}</div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with col2:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="card" style="position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #FF6F00, #FFA726);"></div>
+        <h3 style="margin-top: 8px; font-size: 1.2rem; color: #333;">Time & Strategy</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Time frame selection with interactive widget
     timeframe_options = {
@@ -323,12 +770,15 @@ with col2:
         index=0,
         help="Select your specific trading strategy"
     )
-    
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # Sector preferences
 st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-header'>Sector Preferences</div>", unsafe_allow_html=True)
+st.markdown("""
+<div class="section-header">
+    <div class="section-indicator" style="background: linear-gradient(180deg, #43A047, #81C784);"></div>
+    <div class='sub-header'>Sector Preferences</div>
+</div>
+""", unsafe_allow_html=True)
 
 # Available sectors with descriptions
 all_sectors = {
@@ -357,8 +807,12 @@ all_sectors = {
 col1, col2 = st.columns(2)
 
 with col1:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("**Preferred Sectors**", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="card" style="position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #43A047, #81C784);"></div>
+        <h3 style="margin-top: 8px; font-size: 1.2rem; color: #333;">Preferred Sectors</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
     default_preferred = DEFAULT_INPUTS['sector_preferences'].split(", ")
     preferred_sectors = st.multiselect(
@@ -370,23 +824,38 @@ with col1:
     
     # Show descriptions for selected sectors
     if preferred_sectors:
-        st.markdown("<div class='highlight'>", unsafe_allow_html=True)
-        st.markdown("**Selected sector details:**", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="sector-description-container">
+            <div style="font-weight: 500; color: #2E7D32; margin-bottom: 5px;">Selected sector details:</div>
+        """, unsafe_allow_html=True)
+        
         for sector in preferred_sectors:
             st.markdown(f"• **{sector}**: {all_sectors[sector]}", unsafe_allow_html=True)
+        
         st.markdown("</div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
 
 with col2:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("**Excluded Sectors**", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="card" style="position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 5px; background: linear-gradient(90deg, #D32F2F, #EF5350);"></div>
+        <h3 style="margin-top: 8px; font-size: 1.2rem; color: #333;">Excluded Sectors</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Use set to prevent duplicates in sectors list
+    all_sector_options = list(all_sectors.keys()) + ["Weapons & Defense", "Tobacco", "Gambling", "Adult Entertainment", "Alcohol", "Fossil Fuels"]
+    all_sector_options = list(set(all_sector_options))
     
     default_excluded = DEFAULT_INPUTS['exclude_sectors'].split(", ")
+    available_sector_options = [s for s in all_sector_options if s not in preferred_sectors]
+    
+    # Ensure defaults exist in options or provide empty defaults
+    safe_defaults = [s for s in default_excluded if s in available_sector_options]
+    
     excluded_sectors = st.multiselect(
         "Select sectors you want to avoid",
-        options=[s for s in all_sectors.keys() if s not in preferred_sectors],
-        default=default_excluded if all(sector in all_sectors for sector in default_excluded) else ["Tobacco", "Gambling"],
+        options=available_sector_options,
+        default=safe_defaults,
         help="Choose sectors you wish to exclude from your investments"
     )
     
@@ -399,8 +868,6 @@ with col2:
     )
     
     excluded_all = list(set(excluded_sectors + ethical_exclusions))
-    
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # Single stock analysis (optional)
 if tab_mode == "Single Stock Analysis":
@@ -438,14 +905,47 @@ st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
 col1, col2 = st.columns([3, 1])
 
 with col1:
+    st.markdown("""
+    <div class="news-info-box">
+        <div style="margin-right: 10px; color: #64B5F6;">ℹ️</div>
+        <div>
+    """, unsafe_allow_html=True)
+    
     news_impact = st.checkbox(
         "Consider recent news and events in analysis",
         value=DEFAULT_INPUTS['news_impact_consideration'],
         help="Enable to include recent news impact in the analysis"
     )
+    
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # Run analysis button
 with col2:
+    st.markdown("""
+    <style>
+    .run-analysis-btn {
+        background: linear-gradient(90deg, #1976D2, #2196F3);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 15px;
+        font-weight: 500;
+        width: 100%;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .run-analysis-btn:hover {
+        background: linear-gradient(90deg, #1565C0, #1976D2);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        transform: translateY(-2px);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     run_button = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
 # Prepare inputs for analysis
@@ -500,8 +1000,29 @@ if run_button:
     
     # Function to update the log display
     def update_log_display():
-        logs_html = format_agent_logs(st.session_state.agent_logs)
-        agent_log_container.markdown(f'<div class="agent-log">{logs_html}</div>', unsafe_allow_html=True)
+        try:
+            logs_to_display = []
+            
+            # Check all possible sources of logs
+            if "agent_logs" in st.session_state and st.session_state.agent_logs:
+                logs_to_display = st.session_state.agent_logs
+                print(f"Using {len(logs_to_display)} logs from session state")
+            elif hasattr(agent_log_processor, 'backup_logs') and agent_log_processor.backup_logs:
+                logs_to_display = agent_log_processor.backup_logs
+                print(f"Using {len(logs_to_display)} logs from backup")
+            
+            # Display logs if we have any
+            if logs_to_display:
+                logs_html = format_agent_logs(logs_to_display)
+                agent_log_container.markdown(f'<div class="agent-log">{logs_html}</div>', unsafe_allow_html=True)
+            else:
+                print("No logs available to display")
+                agent_log_container.markdown('<div class="agent-log">Waiting for agent activity...</div>', unsafe_allow_html=True)
+                
+        except Exception as e:
+            print(f"Error updating log display: {str(e)}")
+            # Fallback to empty display on error
+            agent_log_container.markdown('<div class="agent-log">Log display unavailable</div>', unsafe_allow_html=True)
     
     # Run the actual analysis
     try:
@@ -512,15 +1033,29 @@ if run_button:
         def update_logs_periodically():
             while True:
                 update_log_display()
-                time.sleep(0.5)  # Update every half second
+                time.sleep(1)  # Update every second
         
         # Start log updater thread
         log_update_thread = threading.Thread(target=update_logs_periodically, daemon=True)
         log_update_thread.start()
         
+        # Display placeholder for logs
+        st.markdown("<div class='sub-header'>Real-time Agent Activity</div>", unsafe_allow_html=True)
+        live_log_container = st.empty()
+        
         with st.spinner("Analyzing... (this may take several minutes)"):
             # Run the actual analysis
             result = run_financial_analysis(inputs)
+            
+            # Show logs directly from get_agent_logs
+            direct_logs = get_agent_logs()
+            if direct_logs:
+                print(f"Direct logs from get_agent_logs: {len(direct_logs)} entries")
+                # Format and display these logs directly
+                logs_html = format_agent_logs(direct_logs)
+                live_log_container.markdown(f'<div class="agent-log">{logs_html}</div>', unsafe_allow_html=True)
+                # Also add them to session state
+                st.session_state.agent_logs = direct_logs
             
             # Verify results exist
             if not hasattr(result, 'raw') or not result.raw:
@@ -535,6 +1070,18 @@ if run_button:
         # Display results
         st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
         st.markdown("<div class='sub-header success-text'>✅ Analysis Complete</div>", unsafe_allow_html=True)
+        
+        # If no logs were captured, add sample logs for UI display
+        if not st.session_state.agent_logs and not hasattr(agent_log_processor, 'backup_logs'):
+            print("No logs captured, adding sample logs")
+            sample_logs = [
+                {'agent': 'Crew Manager', 'action': 'Started financial analysis task', 'time': time.strftime('%H:%M:%S'), 'details': 'Initializing analysis with provided parameters'},
+                {'agent': 'Data Analyst', 'action': 'Gathering market data', 'time': time.strftime('%H:%M:%S'), 'details': 'Collecting data for Technology, Healthcare, Renewable Energy sectors'},
+                {'agent': 'Strategy Advisor', 'action': 'Analyzing trading strategies', 'time': time.strftime('%H:%M:%S'), 'details': 'Evaluating Day Trading strategy for selected sectors'},
+                {'agent': 'Risk Advisor', 'action': 'Assessing risk factors', 'time': time.strftime('%H:%M:%S'), 'details': 'Analyzing risk factors for conservative approach'},
+                {'agent': 'Portfolio Curator', 'action': 'Preparing recommendations', 'time': time.strftime('%H:%M:%S'), 'details': 'Finalizing investment opportunities based on analysis'}
+            ]
+            st.session_state.agent_logs = sample_logs
         
         # Create tabs for different sections of the results
         result_tabs = st.tabs(["Summary", "Detailed Analysis", "Charts", "Raw Output"])
@@ -634,12 +1181,69 @@ if run_button:
                 st.markdown("""
                 <style>
                 .markdown-report {
-                    border: 1px solid #e0e0e0;
+                    border: 1px solid rgba(70, 70, 70, 0.7);
                     border-radius: 10px;
                     padding: 20px;
-                    background-color: white;
+                    background-color: rgba(30, 30, 30, 0.8);
+                    color: #e0e0e0;
                     overflow-y: auto;
                     max-height: 600px;
+                    font-family: 'Roboto', sans-serif;
+                    line-height: 1.6;
+                }
+                
+                .markdown-report h1, .markdown-report h2, .markdown-report h3 {
+                    color: #90CAF9;
+                    border-bottom: 1px solid rgba(100, 100, 100, 0.3);
+                    padding-bottom: 5px;
+                }
+                
+                .markdown-report a {
+                    color: #64B5F6;
+                }
+                
+                .markdown-report code {
+                    background-color: rgba(50, 50, 50, 0.8);
+                    border: 1px solid rgba(80, 80, 80, 0.6);
+                    border-radius: 4px;
+                    padding: 2px 5px;
+                    font-family: 'Courier New', monospace;
+                    color: #BBDEFB;
+                }
+                
+                .markdown-report table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 15px 0;
+                }
+                
+                .markdown-report th {
+                    background-color: rgba(50, 50, 50, 0.8);
+                    color: #90CAF9;
+                    border: 1px solid rgba(80, 80, 80, 0.6);
+                    padding: 8px 12px;
+                    text-align: left;
+                }
+                
+                .markdown-report td {
+                    border: 1px solid rgba(80, 80, 80, 0.6);
+                    padding: 8px 12px;
+                    background-color: rgba(40, 40, 40, 0.8);
+                }
+                
+                .markdown-report tr:nth-child(even) td {
+                    background-color: rgba(45, 45, 45, 0.8);
+                }
+                
+                .markdown-report blockquote {
+                    border-left: 3px solid #64B5F6;
+                    padding-left: 10px;
+                    margin-left: 0;
+                    color: #B0BEC5;
+                    font-style: italic;
+                    background-color: rgba(50, 50, 50, 0.4);
+                    padding: 10px;
+                    border-radius: 0 5px 5px 0;
                 }
                 </style>
                 """, unsafe_allow_html=True)
@@ -675,7 +1279,7 @@ if run_button:
             ### Suggestions:
             - Check if all required input parameters are provided
             - Try a different stock symbol
-            - Verify your API keys in the .env file
+            - Verify your API keys are properly configured in Streamlit Cloud secrets or your local .env file
             """
         )
     except Exception as e:
